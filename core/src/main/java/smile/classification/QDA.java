@@ -19,9 +19,9 @@ package smile.classification;
 import java.io.Serializable;
 import java.util.Arrays;
 import smile.math.Math;
-import smile.math.matrix.ColumnMajorMatrix;
+import smile.math.matrix.Matrix;
 import smile.math.matrix.DenseMatrix;
-import smile.math.matrix.EigenValueDecomposition;
+import smile.math.matrix.EVD;
 
 /**
  * Quadratic discriminant analysis. QDA is closely related to linear discriminant
@@ -247,7 +247,7 @@ public class QDA implements SoftClassifier<double[]>, Serializable {
                 throw new IllegalArgumentException(String.format("Class %d has only one sample.", i));
             }
 
-            cov[i] = new ColumnMajorMatrix(p, p);
+            cov[i] = Matrix.zeros(p, p);
 
             for (int j = 0; j < p; j++) {
                 mu[i][j] /= ni[i];
@@ -285,7 +285,8 @@ public class QDA implements SoftClassifier<double[]>, Serializable {
                 }
             }
 
-            EigenValueDecomposition eigen = new EigenValueDecomposition(cov[i], true);
+            cov[i].setSymmetric(true);
+            EVD eigen = cov[i].eigen();
 
             for (double s : eigen.getEigenValues()) {
                 if (s < tol) {

@@ -19,10 +19,9 @@ import java.io.Serializable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import smile.math.Math;
-import smile.math.matrix.ColumnMajorMatrix;
+import smile.math.matrix.Matrix;
 import smile.math.matrix.DenseMatrix;
-import smile.math.matrix.EigenValueDecomposition;
-import smile.math.matrix.Lanczos;
+import smile.math.matrix.EVD;
 
 /**
  * Spectral Clustering. Given a set of data points, the similarity matrix may
@@ -115,7 +114,7 @@ public class SpectralClustering implements Serializable {
             D[i] = 1.0 / Math.sqrt(D[i]);
         }
 
-        DenseMatrix L = new ColumnMajorMatrix(n, n);
+        DenseMatrix L = Matrix.zeros(n, n);
         for (int i = 0; i < n; i++) {
             for (int j = 0; j < i; j++) {
                 double l = D[i] * W[i][j] * D[j];
@@ -123,8 +122,9 @@ public class SpectralClustering implements Serializable {
                 L.set(j, i, l);
             }
         }
-        
-        EigenValueDecomposition eigen = Lanczos.eigen(L, k);
+
+        L.setSymmetric(true);
+        EVD eigen = L.eigen(k);
         double[][] Y = eigen.getEigenVectors().array();
         for (int i = 0; i < n; i++) {
             Math.unitize2(Y[i]);
@@ -160,7 +160,7 @@ public class SpectralClustering implements Serializable {
         int n = data.length;
         double gamma = -0.5 / (sigma * sigma);
 
-        DenseMatrix W = new ColumnMajorMatrix(n, n);
+        DenseMatrix W = Matrix.zeros(n, n);
         for (int i = 0; i < n; i++) {
             for (int j = 0; j < i; j++) {
                 double w = Math.exp(gamma * Math.squaredDistance(data[i], data[j]));
@@ -191,7 +191,8 @@ public class SpectralClustering implements Serializable {
             }
         }
 
-        EigenValueDecomposition eigen = Lanczos.eigen(L, k);
+        L.setSymmetric(true);
+        EVD eigen = L.eigen(k);
         double[][] Y = eigen.getEigenVectors().array();
         for (int i = 0; i < n; i++) {
             Math.unitize2(Y[i]);
@@ -239,7 +240,7 @@ public class SpectralClustering implements Serializable {
         }
         data = x;
         
-        DenseMatrix C = new ColumnMajorMatrix(n, l);
+        DenseMatrix C = Matrix.zeros(n, l);
         double[] D = new double[n];
         for (int i = 0; i < n; i++) {
             double sum = 0.0;
@@ -266,14 +267,15 @@ public class SpectralClustering implements Serializable {
             }
         }
 
-        DenseMatrix W = new ColumnMajorMatrix(l, l);
+        DenseMatrix W = Matrix.zeros(l, l);
         for (int i = 0; i < l; i++) {
             for (int j = 0; j < l; j++) {
                 W.set(i, j, C.get(i, j));
             }
         }
-        
-        EigenValueDecomposition eigen = Lanczos.eigen(W, k);
+
+        W.setSymmetric(true);
+        EVD eigen = W.eigen(k);
         double[] e = eigen.getEigenValues();
         double scale = Math.sqrt((double)l / n);
         for (int i = 0; i < k; i++) {

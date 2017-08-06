@@ -16,12 +16,12 @@
 package smile.interpolation;
 
 import smile.math.Math;
-import smile.math.matrix.ColumnMajorMatrix;
+import smile.math.matrix.Matrix;
 import smile.math.matrix.DenseMatrix;
 import smile.math.rbf.GaussianRadialBasis;
 import smile.math.rbf.RadialBasisFunction;
-import smile.math.matrix.CholeskyDecomposition;
-import smile.math.matrix.LUDecomposition;
+import smile.math.matrix.Cholesky;
+import smile.math.matrix.LU;
 
 /**
  * Radial basis function interpolation is a popular method for the data points are
@@ -109,7 +109,7 @@ public class RBFInterpolation1D implements Interpolation {
 
         int n = x.length;
 
-        DenseMatrix G = new ColumnMajorMatrix(n, n);
+        DenseMatrix G = Matrix.zeros(n, n);
         double[] rhs = new double[n];
         for (int i = 0; i < n; i++) {
             double sum = 0.0;
@@ -128,11 +128,11 @@ public class RBFInterpolation1D implements Interpolation {
         }
 
         if (rbf instanceof GaussianRadialBasis) {
-            CholeskyDecomposition cholesky = new CholeskyDecomposition(G);
+            Cholesky cholesky = G.cholesky();
             cholesky.solve(rhs);
             w = rhs;
         } else {
-            LUDecomposition lu = new LUDecomposition(G);
+            LU lu = G.lu(true);
             lu.solve(rhs);
             w = rhs;
         }

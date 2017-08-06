@@ -21,7 +21,11 @@ import java.util.Arrays;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import smile.math.Math;
-import smile.math.matrix.*;
+import smile.math.matrix.Matrix;
+import smile.math.matrix.DenseMatrix;
+import smile.math.matrix.QR;
+import smile.math.matrix.SVD;
+import smile.math.matrix.Cholesky;
 import smile.math.special.Beta;
 
 /**
@@ -184,26 +188,26 @@ public class OLS implements Regression<double[]>, Serializable {
 
         // weights and intercept
         double[] w1 = new double[p+1];
-        ColumnMajorMatrix X = new ColumnMajorMatrix(n, p+1);
+        DenseMatrix X = Matrix.zeros(n, p+1);
         for (int i = 0; i < n; i++) {
             for (int j = 0; j < p; j++)
                 X.set(i, j, x[i][j]);
             X.set(i, p, 1.0);
         }
 
-        QRDecomposition qr = null;
-        SingularValueDecomposition svd = null;
+        QR qr = null;
+        SVD svd = null;
         if (SVD) {
-            svd = new SingularValueDecomposition(X);
+            svd = X.svd();
             svd.solve(y, w1);
         } else {
             try {
-                qr = new QRDecomposition(X);
+                qr = X.qr();
                 qr.solve(y, w1);
             } catch (RuntimeException e) {
                 logger.warn("Matrix is not of full rank, try SVD instead");
                 SVD = true;
-                svd = new SingularValueDecomposition(X);
+                svd = X.svd();
                 Arrays.fill(w1, 0.0);
                 svd.solve(y, w1);
             }
@@ -214,7 +218,7 @@ public class OLS implements Regression<double[]>, Serializable {
         System.arraycopy(w1, 0, w, 0, p);
 
         double[] yhat = new double[n];
-        Math.ax(x, w, yhat);
+        Matrix.newInstance(x).ax(w, yhat);
 
         double TSS = 0.0;
         RSS = 0.0;
@@ -256,7 +260,7 @@ public class OLS implements Regression<double[]>, Serializable {
                 }
             }
         } else {
-            CholeskyDecomposition cholesky = qr.toCholesky();
+            Cholesky cholesky = qr.CholeskyOfAtA();
 
             DenseMatrix inv = cholesky.inverse();
 

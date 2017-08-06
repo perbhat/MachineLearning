@@ -176,17 +176,17 @@ trait Operators {
   def chisqtest(table: Array[Array[Int]]): CorTest = CorTest.chisq(table)
 
   /** Returns an n-by-n zero matrix. */
-  def zeros(n: Int) = new ColumnMajorMatrix(n, n)
+  def zeros(n: Int) = Matrix.zeros(n, n)
   /** Returns an m-by-n zero matrix. */
-  def zeros(m: Int, n: Int) = new ColumnMajorMatrix(m, n)
+  def zeros(m: Int, n: Int) = Matrix.zeros(m, n)
   /** Returns an n-by-n matrix of all ones. */
-  def ones(n: Int) = new ColumnMajorMatrix(n, n, 1.0)
+  def ones(n: Int) = Matrix.ones(n, n)
   /** Returns an m-by-n matrix of all ones. */
-  def ones(m: Int, n: Int) = new ColumnMajorMatrix(m, n, 1.0)
+  def ones(m: Int, n: Int) = Matrix.zeros(m, n)
   /** Returns an n-by-n identity matrix. */
-  def eye(n: Int) = ColumnMajorMatrix.eye(n)
+  def eye(n: Int) = Matrix.eye(n)
   /** Returns an m-by-n identity matrix. */
-  def eye(m: Int, n: Int) = ColumnMajorMatrix.eye(m, n)
+  def eye(m: Int, n: Int) = Matrix.eye(m, n)
 
   /** Returns the trace of matrix. */
   def trace(A: Matrix) = A.trace()
@@ -194,43 +194,50 @@ trait Operators {
   def diag(A: Matrix) = A.diag()
 
   /** LU decomposition. */
-  def lu(A: Array[Array[Double]]) = new LUDecomposition(~A)
+  def lu(A: Array[Array[Double]]) = Matrix.newInstance(A).lu(true)
   /** LU decomposition. */
-  def lu(A: DenseMatrix) = new LUDecomposition(A.copy)
+  def lu(A: DenseMatrix) = A.lu(false)
   /** LU decomposition. */
-  def lu(A: MatrixExpression) = new LUDecomposition(A.toMatrix)
+  def lu(A: MatrixExpression) = A.toMatrix.lu(true)
 
   /** QR decomposition. */
-  def qr(A: Array[Array[Double]]) = new QRDecomposition(~A)
+  def qr(A: Array[Array[Double]]) = Matrix.newInstance(A).qr(true)
   /** QR decomposition. */
-  def qr(A: DenseMatrix) = new QRDecomposition(A.copy)
+  def qr(A: DenseMatrix) = A.qr(false)
   /** QR decomposition. */
-  def qr(A: MatrixExpression) = new QRDecomposition(A.toMatrix)
+  def qr(A: MatrixExpression) = A.toMatrix.qr(true)
 
   /** Cholesky decomposition. */
-  def cholesky(A: Array[Array[Double]]) = new CholeskyDecomposition(~A)
+  def cholesky(A: Array[Array[Double]]) =  Matrix.newInstance(A).cholesky(true)
   /** Cholesky decomposition. */
-  def cholesky(A: DenseMatrix) = new CholeskyDecomposition(A.copy)
+  def cholesky(A: DenseMatrix) = A.cholesky(false)
   /** Cholesky decomposition. */
-  def cholesky(A: MatrixExpression) = new CholeskyDecomposition(A.toMatrix)
+  def cholesky(A: MatrixExpression) = A.toMatrix.cholesky(true)
+
+  /** Returns eigen values. */
+  def eig(A: Array[Array[Double]]) = Matrix.newInstance(A).eig(true)
+  /** Returns eigen values. */
+  def eig(A: DenseMatrix) = A.eig(false)
+  /** Returns eigen values. */
+  def eig(A: MatrixExpression) = A.toMatrix.eig(true)
 
   /** Eigen decomposition. */
-  def eigen(A: Array[Array[Double]]) = new EigenValueDecomposition(~A)
+  def eigen(A: Array[Array[Double]]) = Matrix.newInstance(A).eigen(true)
   /** Eigen decomposition. */
-  def eigen(A: DenseMatrix) = new EigenValueDecomposition(A.copy)
+  def eigen(A: DenseMatrix) = A.eigen(false)
   /** Eigen decomposition. */
-  def eigen(A: MatrixExpression) = new EigenValueDecomposition(A.toMatrix)
+  def eigen(A: MatrixExpression) = A.toMatrix.eigen(true)
   /** Eigen decomposition. */
-  def eigen(A: DenseMatrix, k: Int) = Lanczos.eigen(A, k)
+  def eigen(A: DenseMatrix, k: Int, kappa: Double = 1E-8, maxIter: Int = -1) = A.eigen(k, kappa, maxIter)
 
   /** SVD decomposition. */
-  def svd(A: Array[Array[Double]]) = new SingularValueDecomposition(~A)
+  def svd(A: Array[Array[Double]]) = Matrix.newInstance(A).svd(true)
   /** SVD decomposition. */
-  def svd(A: DenseMatrix) = new SingularValueDecomposition(A.copy)
+  def svd(A: DenseMatrix) = A.svd(false)
   /** SVD decomposition. */
-  def svd(A: MatrixExpression) = new SingularValueDecomposition(A.toMatrix)
+  def svd(A: MatrixExpression) = A.toMatrix.svd(true)
   /** SVD decomposition. */
-  def svd(A: DenseMatrix, k: Int) = Lanczos.svd(A, k)
+  def svd(A: DenseMatrix, k: Int, kappa: Double = 1E-8, maxIter: Int = -1) = A.svd(k, kappa, maxIter)
 
   /** Returns the determinant of matrix. */
   def det(A: DenseMatrix) = lu(A).det()
@@ -278,7 +285,7 @@ private[math] class PimpedArray[T](override val a: Array[T])(implicit val tag: C
 
 private[math] class PimpedArray2D(override val a: Array[Array[Double]])(implicit val tag: ClassTag[Array[Double]]) extends PimpedArrayLike[Array[Double]] {
 
-  def unary_~ = new ColumnMajorMatrix(a)
+  def unary_~ = Matrix.newInstance(a)
 
   def nrows: Int = a.length
 
@@ -333,7 +340,7 @@ private[math] case class PimpedDouble(a: Double) {
 }
 
 private[math] class PimpedDoubleArray(override val a: Array[Double]) extends PimpedArray[Double](a) {
-  def unary_~ = new ColumnMajorMatrix(a.length, 1, a)
+  def unary_~ = Matrix.newInstance(a)
 
   def += (b: Double): Array[Double] = { a.transform(_ + b); a }
   def -= (b: Double): Array[Double] = { a.transform(_ - b); a }
@@ -379,9 +386,9 @@ private[math] class PimpedMatrix(a: DenseMatrix) {
 
   /** Solves A * x = b */
   def \ (b: Array[Double]): Array[Double] = {
-    val x = new Array[Double](a.ncols)
+    val x = b.clone()
     if (a.nrows == a.ncols)
-      lu(a).solve(b, x)
+      lu(a).solve(x)
     else
       qr(a).solve(b, x)
     x

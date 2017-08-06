@@ -18,9 +18,12 @@ package smile.math;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ForkJoinPool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import smile.math.matrix.*;
 import smile.sort.QuickSelect;
 import smile.sort.QuickSort;
 import smile.sort.SortUtils;
@@ -36,10 +39,8 @@ import smile.sort.SortUtils;
  * L<sub>2</sub> norm, L<sub>&infin;</sub> norm, normalize, unitize, cor, Spearman
  * correlation, Kendall correlation, distance, dot product, histogram, vector
  * (element-wise) copy, equal, plus, minus, times, and divide.
- * <li> matrix functions: min, max, rowmean, sum, L<sub>1</sub> norm,
- * L<sub>2</sub> norm, L<sub>&infin;</sub> norm, rank, det, trace, transpose,
- * inverse, SVD and eigen decomposition, linear systems (dense or tridiagonal)
- * and least square, matrix copy, equal, plus, minus and times.
+ * <li> matrix functions: min, max, rowSums, colSums, rowMeans, colMeans, transpose,
+ * cov, cor, matrix copy, equals.
  * <li> random functions: random, randomInt, and permutate.
  * <li> Find the root of a univariate function with or without derivative.
  * </uL>
@@ -93,13 +94,19 @@ public class Math {
      */
     public static int NEGEP = -53;
     /**
+     * True when we create the first random number generator.
+     */
+    private static boolean firstRNG = true;
+    /**
      * High quality random number generator.
      */
     private static ThreadLocal<smile.math.Random> random = new ThreadLocal<smile.math.Random>() {
         protected synchronized smile.math.Random initialValue() {
-            if (Thread.currentThread().getName().equals("run-main-0")) {
-                // For main thread, we use the default seed so that we can
+            if (firstRNG) {
+                // For the first RNG, we use the default seed so that we can
                 // get repeatable results for random algorithms.
+                // Note that this may or may not be the main thread.
+                firstRNG = false;
                 return new smile.math.Random();
             } else {
                 // Make sure other threads not to use the same seed.
@@ -1380,6 +1387,23 @@ public class Math {
     }
 
     /**
+     * Returns the matrix transpose.
+     */
+    public static double[][] transpose(double[][] A) {
+        int m = A.length;
+        int n = A[0].length;
+
+        double[][] matrix = new double[n][m];
+        for (int i = 0; i < m; i++) {
+            for (int j = 0; j < n; j++) {
+                matrix[j][i] = A[i][j];
+            }
+        }
+
+        return matrix;
+    }
+
+    /**
      * Returns the row minimum for a matrix.
      */
     public static double[] rowMin(double[][] data) {
@@ -1408,7 +1432,7 @@ public class Math {
     /**
      * Returns the row sums for a matrix.
      */
-    public static double[] rowSum(double[][] data) {
+    public static double[] rowSums(double[][] data) {
         double[] x = new double[data.length];
 
         for (int i = 0; i < x.length; i++) {
@@ -1421,7 +1445,7 @@ public class Math {
     /**
      * Returns the row means for a matrix.
      */
-    public static double[] rowMean(double[][] data) {
+    public static double[] rowMeans(double[][] data) {
         double[] x = new double[data.length];
 
         for (int i = 0; i < x.length; i++) {
@@ -1434,7 +1458,7 @@ public class Math {
     /**
      * Returns the row standard deviations for a matrix.
      */
-    public static double[] rowSd(double[][] data) {
+    public static double[] rowSds(double[][] data) {
         double[] x = new double[data.length];
 
         for (int i = 0; i < x.length; i++) {
@@ -1487,7 +1511,7 @@ public class Math {
     /**
      * Returns the column sums for a matrix.
      */
-    public static double[] colSum(double[][] data) {
+    public static double[] colSums(double[][] data) {
         double[] x = data[0].clone();
 
         for (int i = 1; i < data.length; i++) {
@@ -1500,9 +1524,9 @@ public class Math {
     }
 
     /**
-     * Returns the column sums for a matrix.
+     * Returns the column means for a matrix.
      */
-    public static double[] colMean(double[][] data) {
+    public static double[] colMeans(double[][] data) {
         double[] x = data[0].clone();
 
         for (int i = 1; i < data.length; i++) {
@@ -1519,7 +1543,7 @@ public class Math {
     /**
      * Returns the column deviations for a matrix.
      */
-    public static double[] colSd(double[][] data) {
+    public static double[] colSds(double[][] data) {
         if (data.length < 2) {
             throw new IllegalArgumentException("Array length is less than 2.");
         }
@@ -1931,6 +1955,79 @@ public class Math {
      */
     public static double distance(SparseArray x, SparseArray y) {
         return Math.sqrt(squaredDistance(x, y));
+    }
+
+    private static class PdistTask implements Callable<Void> {
+        double[][] x;
+        double[][] dist;
+        int nprocs;
+        int pid;
+        boolean half;
+        boolean squared;
+
+        PdistTask(double[][] x, double[][] dist, int nprocs, int pid, boolean squared, boolean half) {
+            this.x = x;
+            this.dist = dist;
+            this.nprocs = nprocs;
+            this.pid = pid;
+            this.squared = squared;
+            this.half = half;
+        }
+
+        @Override
+        public Void call() {
+            int n = x.length;
+            for (int i = pid; i < n; i += nprocs) {
+                for (int j = 0; j < i; j++) {
+                    double d = squared ? squaredDistance(x[i], x[j]) : distance(x[i], x[j]);
+                    dist[i][j] = d;
+                    if (!half) dist[j][i] = d;
+                }
+            }
+            return null;
+        }
+    }
+    /**
+     * Pairwise distance between pairs of objects.
+     * @param x Rows of x correspond to observations, and columns correspond to variables.
+     * @return a full pairwise distance matrix.
+     */
+    public static double[][] pdist(double[][] x) {
+        int n = x.length;
+
+        double[][] dist = new double[n][n];
+        pdist(x, dist, false, false);
+
+        return dist;
+    }
+
+    /**
+     * Pairwise distance between pairs of objects.
+     * @param x Rows of x correspond to observations, and columns correspond to variables.
+     * @param squared If true, compute the squared Euclidean distance.
+     * @param half, If true, only the lower half of dist will be referenced.
+     * @param dist The distance matrix.
+     */
+    public static void pdist(double[][] x, double[][] dist, boolean squared, boolean half) {
+        int n = x.length;
+
+        if (n < 100) {
+            for (int i = 0; i < n; i++) {
+                for (int j = 0; j < i; j++) {
+                    double d = distance(x[i], x[j]);
+                    dist[i][j] = d;
+                    dist[j][i] = d;
+                }
+            }
+        } else {
+            int nprocs = Runtime.getRuntime().availableProcessors();
+            List<PdistTask> tasks = new ArrayList<>();
+            for (int i = 0; i < nprocs; i++) {
+                PdistTask task = new PdistTask(x, dist, nprocs, i, squared, half);
+                tasks.add(task);
+            }
+            ForkJoinPool.commonPool().invokeAll(tasks);
+        }
     }
 
     /**
@@ -2422,7 +2519,7 @@ public class Math {
      * Returns the sample covariance matrix.
      */
     public static double[][] cov(double[][] data) {
-        return cov(data, Math.colMean(data));
+        return cov(data, Math.colMeans(data));
     }
 
     /**
@@ -2523,7 +2620,7 @@ public class Math {
      * Returns the sample correlation matrix.
      */
     public static double[][] cor(double[][] data) {
-        return cor(data, Math.colMean(data));
+        return cor(data, Math.colMeans(data));
     }
 
     /**
@@ -2867,71 +2964,6 @@ public class Math {
     }
 
     /**
-     * L1 matrix norm. Maximum column sum.
-     */
-    public static double norm1(double[][] x) {
-        int m = x.length;
-        int n = x[0].length;
-
-        double f = 0.0;
-        for (int j = 0; j < n; j++) {
-            double s = 0.0;
-            for (int i = 0; i < m; i++) {
-                s += Math.abs(x[i][j]);
-            }
-            f = Math.max(f, s);
-        }
-
-        return f;
-    }
-
-    /**
-     * L2 matrix norm. Maximum singular value.
-     */
-    public static double norm2(double[][] x) {
-        return new SingularValueDecomposition(x).norm();
-    }
-
-    /**
-     * L2 matrix norm. Maximum singular value.
-     */
-    public static double norm(double[][] x) {
-        return norm2(x);
-    }
-
-    /**
-     * Infinity matrix norm. Maximum row sum.
-     */
-    public static double normInf(double[][] x) {
-        int m = x.length;
-
-        double f = 0.0;
-        for (int i = 0; i < m; i++) {
-            double s = norm1(x[i]);
-            f = Math.max(f, s);
-        }
-
-        return f;
-    }
-
-    /**
-     * Frobenius matrix norm. Sqrt of sum of squares of all elements.
-     */
-    public static double normFro(double[][] x) {
-        int m = x.length;
-        int n = x[0].length;
-
-        double f = 0.0;
-        for (int i = 0; i < m; i++) {
-            for (int j = 0; j < n; j++) {
-                f = Math.hypot(f, x[i][j]);
-            }
-        }
-
-        return f;
-    }
-
-    /**
      * Standardizes an array to mean 0 and variance 1.
      */
     public static void standardize(double[] x) {
@@ -3007,7 +3039,7 @@ public class Math {
         int n = x.length;
         int p = x[0].length;
 
-        double[] center = colMean(x);
+        double[] center = colMeans(x);
         for (int i = 0; i < n; i++) {
             for (int j = 0; j < p; j++) {
                 x[i][j] = x[i][j] - center[j];
@@ -3053,7 +3085,7 @@ public class Math {
         int n = x.length;
         int p = x[0].length;
 
-        double[] center = colMean(x);
+        double[] center = colMeans(x);
         if (centerizing) {
             for (int i = 0; i < n; i++) {
                 for (int j = 0; j < p; j++) {
@@ -3404,22 +3436,22 @@ public class Math {
 
     /** Tests if a floating number is zero. */
     public static boolean isZero(float x) {
-        return isZero(x, Float.MIN_VALUE);
+        return isZero(x, EPSILON);
     }
 
     /** Tests if a floating number is zero with given epsilon. */
     public static boolean isZero(float x, float epsilon) {
-        return abs(x) < 2*epsilon;
+        return abs(x) < epsilon;
     }
 
     /** Tests if a floating number is zero. */
     public static boolean isZero(double x) {
-        return isZero(x, Double.MIN_VALUE);
+        return isZero(x, EPSILON);
     }
 
     /** Tests if a floating number is zero with given epsilon. */
     public static boolean isZero(double x, double epsilon) {
-        return abs(x) < 2*epsilon;
+        return abs(x) < epsilon;
     }
 
     /**
@@ -3658,19 +3690,6 @@ public class Math {
     }
 
     /**
-     * Element-wise sum of two matrices y = x + y.
-     */
-    public static void plus(double[][] y, double[][] x) {
-        if (x.length != y.length || x[0].length != y[0].length) {
-            throw new IllegalArgumentException(String.format("Matrices have different rows: %d x %d vs %d x %d", x.length, x[0].length, y.length, y[0].length));
-        }
-
-        for (int i = 0; i < x.length; i++) {
-            plus(y[i], x[i]);
-        }
-    }
-
-    /**
      * Element-wise subtraction of two arrays y = y - x.
      * @param y minuend matrix
      * @param x subtrahend matrix
@@ -3682,21 +3701,6 @@ public class Math {
 
         for (int i = 0; i < x.length; i++) {
             y[i] -= x[i];
-        }
-    }
-
-    /**
-     * Element-wise subtraction of two matrices y = y - x.
-     * @param y minuend matrix
-     * @param x subtrahend matrix
-     */
-    public static void minus(double[][] y, double[][] x) {
-        if (x.length != y.length || x[0].length != y[0].length) {
-            throw new IllegalArgumentException(String.format("Matrices have different rows: %d x %d vs %d x %d", x.length, x[0].length, y.length, y[0].length));
-        }
-
-        for (int i = 0; i < x.length; i++) {
-            minus(y[i], x[i]);
         }
     }
 
@@ -3734,341 +3738,6 @@ public class Math {
     }
 
     /**
-     * Product of a matrix and a vector y = A * x according to the rules of linear algebra.
-     * The left upper submatrix of A is used in the computation based
-     * on the size of x and y.
-     */
-    public static double[] ax(double[][] A, double[] x, double[] y) {
-        int n = min(A.length, y.length);
-        int p = min(A[0].length, x.length);
-
-        Arrays.fill(y, 0.0);
-        for (int i = 0; i < n; i++) {
-            for (int k = 0; k < p; k++) {
-                y[i] += A[i][k] * x[k];
-            }
-        }
-
-        return y;
-    }
-
-    /**
-     * Product of a matrix and a vector y = A * x + y according to the rules of linear algebra.
-     * The left upper submatrix of A is used in the computation based
-     * on the size of x and y.
-     */
-    public static double[] axpy(double[][] A, double[] x, double[] y) {
-        int n = min(A.length, y.length);
-        int p = min(A[0].length, x.length);
-
-        for (int i = 0; i < n; i++) {
-            for (int k = 0; k < p; k++) {
-                y[i] += A[i][k] * x[k];
-            }
-        }
-
-        return y;
-    }
-
-    /**
-     * Product of a matrix and a vector y = A * x + b * y according to the rules of linear algebra.
-     * The left upper submatrix of A is used in the computation based
-     * on the size of x and y.
-     */
-    public static double[] axpy(double[][] A, double[] x, double[] y, double b) {
-        int n = min(A.length, y.length);
-        int p = min(A[0].length, x.length);
-
-        for (int i = 0; i < n; i++) {
-            y[i] *= b;
-            for (int k = 0; k < p; k++) {
-                y[i] += A[i][k] * x[k];
-            }
-        }
-
-        return y;
-    }
-
-    /**
-     * Product of a matrix and a vector y = A<sup>T</sup> * x according to the rules of linear algebra.
-     * The left upper submatrix of A is used in the computation based
-     * on the size of x and y.
-     */
-    public static double[] atx(double[][] A, double[] x, double[] y) {
-        int n = min(A[0].length, y.length);
-        int p = min(A.length, x.length);
-
-        Arrays.fill(y, 0.0);
-        for (int i = 0; i < n; i++) {
-            for (int k = 0; k < p; k++) {
-                y[i] += x[k] * A[k][i];
-            }
-        }
-
-        return y;
-    }
-
-    /**
-     * Product of a matrix and a vector y = A<sup>T</sup> * x + y according to the rules of linear algebra.
-     * The left upper submatrix of A is used in the computation based
-     * on the size of x and y.
-     */
-    public static double[] atxpy(double[][] A, double[] x, double[] y) {
-        int n = min(A[0].length, y.length);
-        int p = min(A.length, x.length);
-
-        for (int i = 0; i < n; i++) {
-            for (int k = 0; k < p; k++) {
-                y[i] += x[k] * A[k][i];
-            }
-        }
-
-        return y;
-    }
-
-    /**
-     * Product of a matrix and a vector y = A<sup>T</sup> * x + b * y according to the rules of linear algebra.
-     * The left upper submatrix of A is used in the computation based
-     * on the size of x and y.
-     */
-    public static double[] atxpy(double[][] A, double[] x, double[] y, double b) {
-        int n = min(A[0].length, y.length);
-        int p = min(A.length, x.length);
-
-        for (int i = 0; i < n; i++) {
-            y[i] *= b;
-            for (int k = 0; k < p; k++) {
-                y[i] += x[k] * A[k][i];
-            }
-        }
-
-        return y;
-    }
-
-    /**
-     * Returns x' * A * x.
-     * The left upper submatrix of A is used in the computation based
-     * on the size of x.
-     */
-    public static double xax(double[][] A, double[] x) {
-        if (A.length != A[0].length) {
-            throw new IllegalArgumentException("The matrix is not square");
-        }
-
-        int n = min(A.length, x.length);
-        double s = 0.0;
-        for (int i = 0; i < n; i++) {
-            for (int j = 0; j < n; j++) {
-                s += A[i][j] * x[i] * x[j];
-            }
-        }
-
-        return s;
-    }
-
-    /**
-     * Matrix multiplication A * A' according to the rules of linear algebra.
-     */
-    public static double[][] aatmm(double[][] A) {
-        int m = A.length;
-        double[][] C = new double[m][m];
-        aatmm(A, C);
-        return C;
-    }
-
-    /**
-     * Matrix multiplication C = A * A' according to the rules of linear algebra.
-     */
-    public static void aatmm(double[][] A, double[][] C) {
-        int m = A.length;
-        int n = A[0].length;
-
-        for (int i = 0; i < m; i++) {
-            for (int j = 0; j < m; j++) {
-                C[i][j] = 0.0;
-                for (int k = 0; k < n; k++) {
-                    C[i][j] += A[i][k] * A[j][k];
-                }
-            }
-        }
-    }
-
-    /**
-     * Matrix multiplication A' * A according to the rules of linear algebra.
-     */
-    public static double[][] atamm(double[][] A) {
-        int n = A[0].length;
-        double[][] C = new double[n][n];
-        atamm(A, C);
-        return C;
-    }
-
-    /**
-     * Matrix multiplication C = A' * A according to the rules of linear algebra.
-     */
-    public static void atamm(double[][] A, double[][] C) {
-        int m = A.length;
-        int n = A[0].length;
-
-        for (int i = 0; i < n; i++) {
-            for (int j = 0; j < n; j++) {
-                C[i][j] = 0.0;
-                for (int k = 0; k < m; k++) {
-                    C[i][j] += A[k][i] * A[k][j];
-                }
-            }
-        }
-    }
-
-    /**
-     * Matrix multiplication A * B according to the rules of linear algebra.
-     */
-    public static double[][] abmm(double[][] A, double[][] B) {
-        if (A[0].length != B.length) {
-            throw new IllegalArgumentException(String.format("Matrix multiplication A * B: %d x %d vs %d x %d", A.length, A[0].length, B.length, B[0].length));
-        }
-
-        int m = A.length;
-        int n = B[0].length;
-        double[][] C = new double[m][n];
-        abmm(A, B, C);
-        return C;
-    }
-
-    /**
-     * Matrix multiplication C = A * B according to the rules of linear algebra.
-     */
-    public static void abmm(double[][] A, double[][] B, double[][] C) {
-        if (A[0].length != B.length) {
-            throw new IllegalArgumentException(String.format("Matrix multiplication A * B: %d x %d vs %d x %d", A.length, A[0].length, B.length, B[0].length));
-        }
-
-        int m = A.length;
-        int n = B[0].length;
-        int l = B.length;
-
-        for (int i = 0; i < m; i++) {
-            for (int j = 0; j < n; j++) {
-                C[i][j] = 0.0;
-                for (int k = 0; k < l; k++) {
-                    C[i][j] += A[i][k] * B[k][j];
-                }
-            }
-        }
-    }
-
-    /**
-     * Matrix multiplication A' * B according to the rules of linear algebra.
-     */
-    public static double[][] atbmm(double[][] A, double[][] B) {
-        if (A.length != B.length) {
-            throw new IllegalArgumentException(String.format("Matrix multiplication A' * B: %d x %d vs %d x %d", A.length, A[0].length, B.length, B[0].length));
-        }
-
-        int m = A[0].length;
-        int n = B[0].length;
-        double[][] C = new double[m][n];
-        atbmm(A, B, C);
-        return C;
-    }
-
-    /**
-     * Matrix multiplication C = A' * B according to the rules of linear algebra.
-     */
-    public static void atbmm(double[][] A, double[][] B, double[][] C) {
-        if (A.length != B.length) {
-            throw new IllegalArgumentException(String.format("Matrix multiplication A' * B: %d x %d vs %d x %d", A.length, A[0].length, B.length, B[0].length));
-        }
-
-        int m = A[0].length;
-        int n = B[0].length;
-        int l = B.length;
-
-        for (int i = 0; i < m; i++) {
-            for (int j = 0; j < n; j++) {
-                C[i][j] = 0.0;
-                for (int k = 0; k < l; k++) {
-                    C[i][j] += A[k][i] * B[k][j];
-                }
-            }
-        }
-    }
-
-    /**
-     * Matrix multiplication A * B' according to the rules of linear algebra.
-     */
-    public static double[][] abtmm(double[][] A, double[][] B) {
-        if (A[0].length != B[0].length) {
-            throw new IllegalArgumentException(String.format("Matrix multiplication A * B': %d x %d vs %d x %d", A.length, A[0].length, B.length, B[0].length));
-        }
-
-        int m = A.length;
-        int n = B.length;
-        double[][] C = new double[m][n];
-        abtmm(A, B, C);
-        return C;
-    }
-
-    /**
-     * Matrix multiplication C = A * B' according to the rules of linear algebra.
-     */
-    public static void abtmm(double[][] A, double[][] B, double[][] C) {
-        if (A[0].length != B[0].length) {
-            throw new IllegalArgumentException(String.format("Matrix multiplication A * B': %d x %d vs %d x %d", A.length, A[0].length, B.length, B[0].length));
-        }
-
-        int m = A.length;
-        int n = B.length;
-        int l = B[0].length;
-
-        for (int i = 0; i < m; i++) {
-            for (int j = 0; j < n; j++) {
-                C[i][j] = 0.0;
-                for (int k = 0; k < l; k++) {
-                    C[i][j] += A[i][k] * B[j][k];
-                }
-            }
-        }
-    }
-
-    /**
-     * Matrix multiplication A' * B' according to the rules of linear algebra.
-     */
-    public static double[][] atbtmm(double[][] A, double[][] B) {
-        if (A.length != B[0].length) {
-            throw new IllegalArgumentException(String.format("Matrix multiplication A' * B': %d x %d vs %d x %d", A.length, A[0].length, B.length, B[0].length));
-        }
-
-        int m = A[0].length;
-        int n = B.length;
-        double[][] C = new double[m][n];
-        atbtmm(A, B, C);
-        return C;
-    }
-
-    /**
-     * Matrix multiplication C = A' * B' according to the rules of linear algebra.
-     */
-    public static void atbtmm(double[][] A, double[][] B, double[][] C) {
-        if (A.length != B[0].length) {
-            throw new IllegalArgumentException(String.format("Matrix multiplication A' * B': %d x %d vs %d x %d", A.length, A[0].length, B.length, B[0].length));
-        }
-
-        int m = A[0].length;
-        int n = B.length;
-        int l = A.length;
-
-        for (int i = 0; i < m; i++) {
-            for (int j = 0; j < n; j++) {
-                C[i][j] = 0.0;
-                for (int k = 0; k < l; k++) {
-                    C[i][j] += A[k][i] * B[j][k];
-                }
-            }
-        }
-    }
-
-    /**
      * Raise each element of an array to a scalar power.
      * @param x array
      * @param n scalar exponent
@@ -4078,22 +3747,6 @@ public class Math {
         double[] array = new double[x.length];
         for (int i = 0; i < x.length; i++) {
             array[i] = Math.pow(x[i], n);
-        }
-        return array;
-    }
-
-    /**
-     * Raise each element of a matrix to a scalar power.
-     * @param x matrix
-     * @param n exponent
-     * @return x<sup>n</sup>
-     */
-    public static double[][] pow(double[][] x, double n) {
-        double[][] array = new double[x.length][x[0].length];
-        for (int i = 0; i < x.length; i++) {
-            for (int j = 0; j < x[i].length; j++) {
-                array[i][j] = Math.pow(x[i][j], n);
-            }
         }
         return array;
     }
@@ -4161,249 +3814,6 @@ public class Math {
         }
         
         return index;
-    }
-    
-    /**
-     * Returns a square identity matrix of size n.
-     * @return     An n-by-n matrix with ones on the diagonal and zeros elsewhere.
-     */
-    public static double[][] eye(int n) {
-        double[][] x = new double[n][n];
-        for (int i = 0; i < n; i++) {
-            x[i][i] = 1.0;
-        }
-        return x;
-    }
-
-    /**
-     * Returns an identity matrix of size m by n.
-     * @param m    the number of rows.
-     * @param n    the number of columns.
-     * @return     an m-by-n matrix with ones on the diagonal and zeros elsewhere.
-     */
-    public static double[][] eye(int m, int n) {
-        double[][] x = new double[m][n];
-        int k = Math.min(m, n);
-        for (int i = 0; i < k; i++) {
-            x[i][i] = 1.0;
-        }
-        return x;
-    }
-
-    /**
-     * Returns the matrix trace. The sum of the diagonal elements.
-     */
-    public static double trace(double[][] A) {
-        int n = Math.min(A.length, A[0].length);
-
-        double t = 0.0;
-        for (int i = 0; i < n; i++) {
-            t += A[i][i];
-        }
-
-        return t;
-    }
-
-    /**
-     * Returns the matrix transpose.
-     */
-    public static double[][] transpose(double[][] A) {
-        int m = A.length;
-        int n = A[0].length;
-
-        double[][] matrix = new double[n][m];
-        for (int i = 0; i < m; i++) {
-            for (int j = 0; j < n; j++) {
-                matrix[j][i] = A[i][j];
-            }
-        }
-
-        return matrix;
-    }
-
-    /**
-     * Returns the matrix inverse or pseudo inverse.
-     * @return  matrix inverse if A is square, pseudo inverse otherwise.
-     */
-    public static DenseMatrix inverse(double[][] A) {
-        if (A.length == A[0].length) {
-            LUDecomposition lu = new LUDecomposition(A);
-            return lu.inverse();
-        } else {
-            QRDecomposition qr = new QRDecomposition(A);
-            return qr.inverse();
-        }
-    }
-
-    /**
-     * Returns the matrix determinant
-     */
-    public static double det(double[][] A) {
-        if (A.length != A[0].length) {
-            throw new IllegalArgumentException(String.format("Matrix is not square: %d x %d", A.length, A[0].length));
-        }
-
-        LUDecomposition lu = new LUDecomposition(A);
-        return lu.det();
-    }
-
-    /**
-     * Returns the matrix rank. Note that the input matrix will be altered.
-     * @return  Effective numerical rank.
-     */
-    public static int rank(double[][] A) {
-        return new SingularValueDecomposition(A).rank();
-    }
-
-    /**
-     * Returns the largest eigen pair of matrix with the power iteration
-     * under the assumptions A has an eigenvalue that is strictly greater
-     * in magnitude than its other its other eigenvalues and the starting
-     * vector has a nonzero component in the direction of an eigenvector
-     * associated with the dominant eigenvalue.
-     * @param v on input, it is the non-zero initial guess of the eigen vector.
-     * On output, it is the eigen vector corresponding largest eigen value.
-     * @return the largest eigen value.
-     */
-    public static double eigen(double[][] A, double[] v) {
-        return PowerIteration.eigen(new ColumnMajorMatrix(A), v);
-    }
-
-    /**
-     * Returns the largest eigen pair of matrix with the power iteration
-     * under the assumptions A has an eigenvalue that is strictly greater
-     * in magnitude than its other its other eigenvalues and the starting
-     * vector has a nonzero component in the direction of an eigenvector
-     * associated with the dominant eigenvalue.
-     * @param v on input, it is the non-zero initial guess of the eigen vector.
-     * On output, it is the eigen vector corresponding largest eigen value.
-     * @param tol the desired convergence tolerance.
-     * @return the largest eigen value.
-     */
-    public static double eigen(double[][] A, double[] v, double tol) {
-        return PowerIteration.eigen(new ColumnMajorMatrix(A), v, tol);
-    }
-
-    /**
-     * Returns the largest eigen pair of matrix with the power iteration
-     * under the assumptions A has an eigenvalue that is strictly greater
-     * in magnitude than its other its other eigenvalues and the starting
-     * vector has a nonzero component in the direction of an eigenvector
-     * associated with the dominant eigenvalue.
-     * @param v on input, it is the non-zero initial guess of the eigen vector.
-     * On output, it is the eigen vector corresponding largest eigen value.
-     * @return the largest eigen value.
-     */
-    public static double eigen(Matrix A, double[] v) {
-        return PowerIteration.eigen(A, v);
-    }
-
-    /**
-     * Returns the largest eigen pair of matrix with the power iteration
-     * under the assumptions A has an eigenvalue that is strictly greater
-     * in magnitude than its other its other eigenvalues and the starting
-     * vector has a nonzero component in the direction of an eigenvector
-     * associated with the dominant eigenvalue.
-     * @param v on input, it is the non-zero initial guess of the eigen vector.
-     * On output, it is the eigen vector corresponding largest eigen value.
-     * @param tol the desired convergence tolerance.
-     * @return the largest eigen value.
-     */
-    public static double eigen(Matrix A, double[] v, double tol) {
-        return PowerIteration.eigen(A, v, tol);
-    }
-
-    /**
-     * Find k largest approximate eigen pairs of a symmetric matrix by an
-     * iterative Lanczos algorithm.
-     */
-    public static EigenValueDecomposition eigen(double[][] A, int k) {
-        return Lanczos.eigen(new ColumnMajorMatrix(A), k);
-    }
-
-    /**
-     * Find k largest approximate eigen pairs of a symmetric matrix by an
-     * iterative Lanczos algorithm.
-     */
-    public static EigenValueDecomposition eigen(Matrix A, int k) {
-        return Lanczos.eigen(A, k);
-    }
-
-    /**
-     * Returns the eigen value decomposition of a square matrix. Note that the input
-     * matrix will be altered during decomposition.
-     * @param A    square matrix which will be altered after decomposition.
-     */
-    public static EigenValueDecomposition eigen(double[][] A) {
-        return new EigenValueDecomposition(A);
-    }
-
-    /**
-     * Returns the eigen value decomposition of a square matrix. Note that the input
-     * matrix will be altered during decomposition.
-     * @param A    square matrix which will be altered after decomposition.
-     * @param symmetric if the matrix A is symmetric.
-     */
-    public static EigenValueDecomposition eigen(double[][] A, boolean symmetric) {
-        return new EigenValueDecomposition(A, symmetric, false);
-    }
-
-    /**
-     * Returns the eigen value decomposition of a square matrix. Note that the input
-     * matrix will be altered during decomposition.
-     * @param A    square matrix which will be altered after decomposition.
-     * @param symmetric if the matrix A is symmetric.
-     * @param onlyValues true if only compute eigenvalues; the default is to compute eigenvectors also.
-     */
-    public static EigenValueDecomposition eigen(double[][] A, boolean symmetric, boolean onlyValues) {
-        return new EigenValueDecomposition(A, symmetric, onlyValues);
-    }
-
-    /**
-     * Returns the singular value decomposition. Note that the input matrix
-     * will be altered after decomposition.
-     */
-    public static SingularValueDecomposition svd(double[][] A) {
-        return new SingularValueDecomposition(A);
-    }
-
-    /**
-     * Solve A*x = b (exact solution if A is square, least squares
-     * solution otherwise), which means the LU or QR decomposition will take
-     * place in A and the results will be stored in b.
-     * @return the solution, which is actually the vector b in case of exact solution.
-     */
-    public static double[] solve(double[][] A, double[] b) {
-        if (A.length == A[0].length) {
-            LUDecomposition lu = new LUDecomposition(A);
-            lu.solve(b);
-            return b;
-        } else {
-            double[] x = new double[A[0].length];
-            QRDecomposition qr = new QRDecomposition(A);
-            qr.solve(b, x);
-            return x;
-        }
-    }
-
-    /**
-     * Solve A*X = B (exact solution if A is square, least squares
-     * solution otherwise), which means the LU or QR decomposition will take
-     * place in A and the results will be stored in B.
-     * @return the solution.
-     */
-    public static DenseMatrix solve(double[][] A, double[][] B) {
-        DenseMatrix b = new ColumnMajorMatrix(B);
-        DenseMatrix X = new ColumnMajorMatrix(A[0].length, B[0].length);
-        if (A.length == A[0].length) {
-            LUDecomposition lu = new LUDecomposition(A);
-            lu.solve(b, X);
-        } else {
-            QRDecomposition qr = new QRDecomposition(A);
-            qr.solve(b, X);
-        }
-
-        return X;
     }
 
     /**

@@ -20,9 +20,9 @@ import java.io.Serializable;
 import java.util.Arrays;
 
 import smile.math.distance.Metric;
-import smile.math.matrix.ColumnMajorMatrix;
+import smile.math.matrix.Matrix;
 import smile.math.matrix.DenseMatrix;
-import smile.math.matrix.QRDecomposition;
+import smile.math.matrix.QR;
 import smile.math.rbf.GaussianRadialBasis;
 import smile.math.rbf.RadialBasisFunction;
 import smile.util.SmileUtils;
@@ -137,7 +137,7 @@ public class RBFNetwork<T> implements Regression<T>, Serializable {
          * @param rbf the radial basis function.
          * @param m the number of basis functions.
          */
-        public Trainer setRBF(RadialBasisFunction rbf, int m) {
+        public Trainer<T> setRBF(RadialBasisFunction rbf, int m) {
             this.m = m;
             this.rbf = rep(rbf, m);
             return this;
@@ -147,7 +147,7 @@ public class RBFNetwork<T> implements Regression<T>, Serializable {
          * Sets the radial basis functions.
          * @param rbf the radial basis functions.
          */
-        public Trainer setRBF(RadialBasisFunction[] rbf) {
+        public Trainer<T> setRBF(RadialBasisFunction[] rbf) {
             this.m = rbf.length;
             this.rbf = rbf;
             return this;
@@ -157,7 +157,7 @@ public class RBFNetwork<T> implements Regression<T>, Serializable {
          * Sets the number of centers.
          * @param m the number of centers.
          */
-        public Trainer setNumCenters(int m) {
+        public Trainer<T> setNumCenters(int m) {
             this.m = m;
             return this;
         }
@@ -166,7 +166,7 @@ public class RBFNetwork<T> implements Regression<T>, Serializable {
          * Sets true to learn normalized RBF network.
          * @param normalized true to learn normalized RBF network.
          */
-        public Trainer setNormalized(boolean normalized) {
+        public Trainer<T> setNormalized(boolean normalized) {
             this.normalized = normalized;
             return this;
         }
@@ -271,9 +271,8 @@ public class RBFNetwork<T> implements Regression<T>, Serializable {
         int n = x.length;
         int m = rbf.length;
 
-        DenseMatrix G = new ColumnMajorMatrix(n, m);
+        DenseMatrix G = Matrix.zeros(n, m);
         double[] b = new double[n];
-        w = new double[m];
         for (int i = 0; i < n; i++) {
             double sum = 0.0;
             for (int j = 0; j < m; j++) {
@@ -289,7 +288,8 @@ public class RBFNetwork<T> implements Regression<T>, Serializable {
             }
         }
 
-        QRDecomposition qr = new QRDecomposition(G);
+        w = new double[m];
+        QR qr = G.qr();
         qr.solve(b, w);
     }
 

@@ -35,172 +35,6 @@ import smile.math.Math;
 public class Lanczos {
     private static final Logger logger = LoggerFactory.getLogger(Lanczos.class);
 
-    private static class ATA implements Matrix {
-
-        Matrix A;
-        double[] buf;
-
-        public ATA(Matrix A) {
-            this.A = A;
-            if (A.nrows() >= A.ncols()) {
-                buf = new double[A.nrows()];
-            } else {
-                buf = new double[A.ncols()];
-            }
-        }
-
-        @Override
-        public int nrows() {
-            if (A.nrows() >= A.ncols()) {
-                return A.ncols();
-            } else {
-                return A.nrows();
-            }
-        }
-
-        @Override
-        public int ncols() {
-            return nrows();
-        }
-
-        @Override
-        public ATA transpose() {
-            return this;
-        }
-
-        @Override
-        public ATA ata() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public ATA aat() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public double[] ax(double[] x, double[] y) {
-            if (A.nrows() >= A.ncols()) {
-                A.ax(x, buf);
-                A.atx(buf, y);
-            } else {
-                A.atx(x, buf);
-                A.ax(buf, y);
-            }
-
-            return y;
-        }
-
-        @Override
-        public double[] atx(double[] x, double[] y) {
-            return ax(x, y);
-        }
-
-        @Override
-        public double[] axpy(double[] x, double[] y) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public double[] axpy(double[] x, double[] y, double b) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public double get(int i, int j) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public double apply(int i, int j) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public double[] atxpy(double[] x, double[] y) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public double[] atxpy(double[] x, double[] y, double b) {
-            throw new UnsupportedOperationException();
-        }
-    };
-
-    /**
-     * Find k largest approximate singular triples of a matrix by the
-     * Lanczos algorithm.
-     *
-     * @param A the matrix supporting matrix vector multiplication operation.
-     * @param k the number of singular triples we wish to compute for the input matrix.
-     * This number cannot exceed the size of A.
-     */
-    public static SingularValueDecomposition svd(Matrix A, int k) {
-        return svd(A, k, 1.0E-6);
-    }
-
-    /**
-     * Find k largest approximate singular triples of a matrix by the
-     * Lanczos algorithm.
-     *
-     * @param A the matrix supporting matrix vector multiplication operation.
-     * @param k the number of singular triples we wish to compute for the input matrix.
-     * This number cannot exceed the size of A.
-     * @param kappa relative accuracy of ritz values acceptable as singular values.
-     */
-    public static SingularValueDecomposition svd(Matrix A, int k, double kappa) {
-        ATA B = new ATA(A);
-        EigenValueDecomposition eigen = Lanczos.eigen(B, k, kappa);
-
-        double[] s = eigen.getEigenValues();
-        for (int i = 0; i < s.length; i++) {
-            s[i] = Math.sqrt(s[i]);
-        }
-
-        if (A.nrows() >= A.ncols()) {
-
-            DenseMatrix V = eigen.getEigenVectors();
-
-            double[] tmp = new double[A.nrows()];
-            double[] vi = new double[A.ncols()];
-            DenseMatrix U = new ColumnMajorMatrix(A.nrows(), s.length);
-            for (int i = 0; i < s.length; i++) {
-                for (int j = 0; j < A.ncols(); j++) {
-                    vi[j] = V.get(j, i);
-                }
-
-                A.ax(vi, tmp);
-
-                for (int j = 0; j < A.nrows(); j++) {
-                    U.set(j, i, tmp[j] / s[i]);
-                }
-            }
-
-            return new SingularValueDecomposition(U, V, s, false);
-
-        } else {
-
-            DenseMatrix U = eigen.getEigenVectors();
-
-            double[] tmp = new double[A.ncols()];
-            double[] ui = new double[A.nrows()];
-            DenseMatrix V = new ColumnMajorMatrix(A.ncols(), s.length);
-            for (int i = 0; i < s.length; i++) {
-                for (int j = 0; j < A.nrows(); j++) {
-                    ui[j] = U.get(j, i);
-                }
-
-                A.atx(ui, tmp);
-
-                for (int j = 0; j < A.ncols(); j++) {
-                    V.set(j, i, tmp[j] / s[i]);
-                }
-            }
-
-            return new SingularValueDecomposition(U, V, s, false);
-        }
-    }
-
     /**
      * Find k largest approximate eigen pairs of a symmetric matrix by the
      * Lanczos algorithm.
@@ -209,8 +43,8 @@ public class Lanczos {
      * @param k the number of eigenvalues we wish to compute for the input matrix.
      * This number cannot exceed the size of A.
      */
-    public static EigenValueDecomposition eigen(Matrix A, int k) {
-        return eigen(A, k, 1.0E-6);
+    public static EVD eigen(Matrix A, int k) {
+        return eigen(A, k, 1.0E-8, 10 * A.nrows());
     }
 
     /**
@@ -221,14 +55,27 @@ public class Lanczos {
      * @param k the number of eigenvalues we wish to compute for the input matrix.
      * This number cannot exceed the size of A.
      * @param kappa relative accuracy of ritz values acceptable as eigenvalues.
+     * @param maxIter Maximum number of iterations.
      */
-    public static EigenValueDecomposition eigen(Matrix A, int k, double kappa) {
+    public static EVD eigen(Matrix A, int k, double kappa, int maxIter) {
         if (A.nrows() != A.ncols()) {
-            throw new IllegalArgumentException("Matrix is not square.");
+            throw new IllegalArgumentException(String.format("Matrix is not square: %d x %d", A.nrows(), A.ncols()));
+        }
+
+        if (!A.isSymmetric()) {
+            throw new IllegalArgumentException("Matrix is not symmetric.");
         }
 
         if (k < 1 || k > A.nrows()) {
             throw new IllegalArgumentException("k is larger than the size of A: " + k + " > " + A.nrows());
+        }
+
+        if (kappa <= Math.EPSILON) {
+            throw new IllegalArgumentException("Invalid tolerance: kappa = " + kappa);
+        }
+
+        if (maxIter <= 0) {
+            maxIter = 10 * A.nrows();
         }
 
         int n = A.nrows();
@@ -269,7 +116,7 @@ public class Lanczos {
         // arrays used in the QL decomposition
         double[] ritz = new double[n + 1];
         // eigenvectors calculated in the QL decomposition
-        ColumnMajorMatrix z = null;
+        DenseMatrix z = null;
 
         // First step of the Lanczos algorithm. It also does a step of extended
         // local re-orthogonalization.
@@ -317,7 +164,8 @@ public class Lanczos {
         boolean enough = false;
 
         // algorithm iterations
-        while (!enough) {
+        int iter = 0;
+        for (; !enough && iter < maxIter; iter++) {
             if (rnm <= tol) {
                 rnm = 0.0;
             }
@@ -410,14 +258,14 @@ public class Lanczos {
             System.arraycopy(alf, 0, ritz, 0, j + 1);
             System.arraycopy(bet, 0, wptr[5], 0, j + 1);
 
-            z = new ColumnMajorMatrix(j + 1, j + 1);
+            z = Matrix.zeros(j + 1, j + 1);
             for (int i = 0; i <= j; i++) {
                 z.set(i, i, 1.0);
             }
 
             // compute the eigenvalues and eigenvectors of the
             // tridiagonal matrix
-            EigenValueDecomposition.tql2(z, ritz, wptr[5], j + 1);
+            JMatrix.tql2(z, ritz, wptr[5]);
 
             for (int i = 0; i <= j; i++) {
                 bnd[i] = rnm * Math.abs(z.get(j, i));
@@ -442,12 +290,15 @@ public class Lanczos {
             }
             enough = enough || first >= n;
         }
+
+        logger.info("Lanczos: " + iter + " iterations for Matrix of size " + n);
+
         store(q, j, wptr[1]);
 
         k = Math.min(k, neig);
 
         double[] eigenvalues = new double[k];
-        ColumnMajorMatrix eigenvectors = new ColumnMajorMatrix(n, k);
+        DenseMatrix eigenvectors = Matrix.zeros(n, k);
         for (int i = 0, index = 0; i <= j && index < k; i++) {
             if (bnd[i] <= kappa * Math.abs(ritz[i])) {
                 for (int row = 0; row < n; row++) {
@@ -459,7 +310,7 @@ public class Lanczos {
             }
         }
 
-        return new EigenValueDecomposition(eigenvectors, eigenvalues);
+        return new EVD(eigenvectors, eigenvalues);
     }
 
     /**

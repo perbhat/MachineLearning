@@ -15,11 +15,10 @@
  *******************************************************************************/
 package smile.imputation;
 
-import smile.math.Math;
-import smile.math.matrix.ColumnMajorMatrix;
+import smile.math.matrix.Matrix;
 import smile.math.matrix.DenseMatrix;
-import smile.math.matrix.QRDecomposition;
-import smile.math.matrix.SingularValueDecomposition;
+import smile.math.matrix.QR;
+import smile.math.matrix.SVD;
 
 /**
  * Missing value imputation with singular value decomposition. Given SVD
@@ -121,7 +120,7 @@ public class SVDImputation implements MissingValueImputation {
      * @param data the data with current imputations.
      */
     private void svdImpute(double[][] raw, double[][] data) {
-        SingularValueDecomposition svd = new SingularValueDecomposition(data);
+        SVD svd = Matrix.newInstance(data).svd();
 
         int d = data[0].length;
 
@@ -139,7 +138,7 @@ public class SVDImputation implements MissingValueImputation {
                 continue;
             }
 
-            DenseMatrix A = new ColumnMajorMatrix(d - missing, k);
+            DenseMatrix A = Matrix.zeros(d - missing, k);
             double[] b = new double[d - missing];
 
             for (int j = 0, m = 0; j < d; j++) {
@@ -152,7 +151,7 @@ public class SVDImputation implements MissingValueImputation {
             }
 
             double[] s = new double[k];
-            QRDecomposition qr = new QRDecomposition(A);
+            QR qr = A.qr();
             qr.solve(b, s);
 
             for (int j = 0; j < d; j++) {

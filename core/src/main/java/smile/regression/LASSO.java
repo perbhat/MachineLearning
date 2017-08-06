@@ -21,8 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import smile.math.Math;
 import smile.math.matrix.Matrix;
-import smile.math.matrix.NaiveMatrix;
-import smile.math.matrix.RowMajorMatrix;
+import smile.math.matrix.DenseMatrix;
 import smile.math.matrix.SparseMatrix;
 import smile.math.matrix.BiconjugateGradient;
 import smile.math.matrix.Preconditioner;
@@ -240,8 +239,8 @@ public class LASSO  implements Regression<double[]>, Serializable {
         int n = x.length;
         int p = x[0].length;
 
-        center = Math.colMean(x);
-        RowMajorMatrix X = new RowMajorMatrix(n, p);
+        center = Math.colMeans(x);
+        DenseMatrix X = Matrix.zeros(n, p);
 
         for (int i = 0; i < n; i++) {
             for (int j = 0; j < p; j++) {
@@ -274,7 +273,7 @@ public class LASSO  implements Regression<double[]>, Serializable {
         }
 
         b = ym - Math.dot(w, center);
-        fitness(new NaiveMatrix(x), y);
+        fitness(Matrix.newInstance(x), y);
     }
 
     /**
@@ -558,7 +557,7 @@ public class LASSO  implements Regression<double[]>, Serializable {
         return sum;
     }
 
-    class PCGMatrix implements Matrix, Preconditioner {
+    class PCGMatrix extends Matrix implements Preconditioner {
 
         Matrix A;
         Matrix AtA;
@@ -575,13 +574,15 @@ public class LASSO  implements Regression<double[]>, Serializable {
             this.d2 = d2;
             this.prb = prb;
             this.prs = prs;
+            setSymmetric(true);
 
             int n = A.nrows();
             ax = new double[n];
             atax = new double[p];
 
-            if ((A.ncols() < 10000) && !(A instanceof SparseMatrix))
+            if ((A.ncols() < 10000) && (A instanceof DenseMatrix)) {
                 AtA = A.ata();
+            }
         }
 
         @Override

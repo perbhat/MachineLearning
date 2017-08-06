@@ -19,9 +19,9 @@ package smile.classification;
 import java.io.Serializable;
 import java.util.Arrays;
 import smile.math.Math;
-import smile.math.matrix.ColumnMajorMatrix;
+import smile.math.matrix.Matrix;
 import smile.math.matrix.DenseMatrix;
-import smile.math.matrix.EigenValueDecomposition;
+import smile.math.matrix.EVD;
 
 /**
  * Regularized discriminant analysis. RDA is a compromise between LDA and QDA,
@@ -236,9 +236,9 @@ public class RDA implements SoftClassifier<double[]>, Serializable {
         // The number of instances in each class.
         int[] ni = new int[k];
         // Common mean vector.
-        double[] mean = Math.colMean(x);
+        double[] mean = Math.colMeans(x);
         // Common covariance.
-        DenseMatrix C = new ColumnMajorMatrix(p, p);
+        DenseMatrix C = Matrix.zeros(p, p);
         // Class mean vectors.
         mu = new double[k][p];
         // Class covarainces.
@@ -257,7 +257,7 @@ public class RDA implements SoftClassifier<double[]>, Serializable {
                 throw new IllegalArgumentException(String.format("Class %d has only one sample.", i));
             }
 
-            cov[i] = new ColumnMajorMatrix(p, p);
+            cov[i] = Matrix.zeros(p, p);
 
             for (int j = 0; j < p; j++) {
                 mu[i][j] /= ni[i];
@@ -308,7 +308,8 @@ public class RDA implements SoftClassifier<double[]>, Serializable {
                 }
             }
 
-            EigenValueDecomposition eigen = new EigenValueDecomposition(cov[i], true);
+            cov[i].setSymmetric(true);
+            EVD eigen = cov[i].eigen();
 
             for (double s : eigen.getEigenValues()) {
                 if (s < tol) {

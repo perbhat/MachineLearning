@@ -19,9 +19,9 @@ package smile.classification;
 import java.io.Serializable;
 import java.util.Arrays;
 import smile.math.Math;
-import smile.math.matrix.ColumnMajorMatrix;
+import smile.math.matrix.Matrix;
 import smile.math.matrix.DenseMatrix;
-import smile.math.matrix.EigenValueDecomposition;
+import smile.math.matrix.EVD;
 
 /**
  * Linear discriminant analysis. LDA is based on the Bayes decision theory
@@ -240,9 +240,9 @@ public class LDA implements SoftClassifier<double[]>, Serializable {
         // The number of instances in each class.
         int[] ni = new int[k];
         // Common mean vector.
-        double[] mean = Math.colMean(x);
+        double[] mean = Math.colMeans(x);
         // Common covariance.
-        DenseMatrix C = new ColumnMajorMatrix(p, p);
+        DenseMatrix C = Matrix.zeros(p, p);
         // Class mean vectors.
         mu = new double[k][p];
 
@@ -293,7 +293,8 @@ public class LDA implements SoftClassifier<double[]>, Serializable {
             }
         }
 
-        EigenValueDecomposition evd = new EigenValueDecomposition(C, true);
+        C.setSymmetric(true);
+        EVD evd = C.eigen();
 
         for (double s : evd.getEigenValues()) {
             if (s < tol) {

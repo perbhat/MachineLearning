@@ -16,8 +16,12 @@
 
 package smile.nd4j;
 
-import java.util.Arrays;
+import smile.math.matrix.Cholesky;
 import smile.math.matrix.DenseMatrix;
+import smile.math.matrix.LU;
+import smile.math.matrix.QR;
+import smile.math.matrix.SVD;
+import smile.math.matrix.EVD;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.factory.Nd4j;
 import org.nd4j.linalg.inverse.InvertMatrix;
@@ -27,7 +31,9 @@ import org.nd4j.linalg.inverse.InvertMatrix;
  *
  * @author Haifeng Li
  */
-public class NDMatrix implements DenseMatrix {
+public class NDMatrix extends DenseMatrix {
+    private static final long serialVersionUID = 1L;
+
     /**
      * The matrix storage.
      */
@@ -81,13 +87,18 @@ public class NDMatrix implements DenseMatrix {
     }
 
     @Override
-    public String toString() {
-        return toString(false);
+    public NDMatrix copy() {
+        return new NDMatrix(A.dup());
     }
 
     @Override
-    public NDMatrix copy() {
-        return new NDMatrix(A.dup());
+    public double[] data() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public int ld() {
+        return nrows();
     }
 
     @Override
@@ -112,11 +123,44 @@ public class NDMatrix implements DenseMatrix {
     }
 
     @Override
+    public LU lu() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Cholesky cholesky() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public QR qr() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public SVD svd() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public double[] eig() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public EVD eigen() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public double[] ax(double[] x, double[] y) {
-        INDArray ndx = Nd4j.create(x, new int[]{x.length, 1});
+        // Nd4j.getBlasWrapper().level2().gemv() crashes.
+        // Use gemm for now.
+        int m = nrows();
+        int n = ncols();
+        INDArray ndx = Nd4j.create(x, new int[]{n, 1});
         INDArray ndy = Nd4j.gemm(A, ndx, false, false);
-        int n = nrows();
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; i < m; i++) {
             y[i] = ndy.getDouble(i);
         }
 
@@ -125,10 +169,13 @@ public class NDMatrix implements DenseMatrix {
 
     @Override
     public double[] axpy(double[] x, double[] y) {
-        INDArray ndx = Nd4j.create(x, new int[]{x.length, 1});
+        // Nd4j.getBlasWrapper().level2().gemv() crashes.
+        // Use gemm for now.
+        int m = nrows();
+        int n = ncols();
+        INDArray ndx = Nd4j.create(x, new int[]{n, 1});
         INDArray ndy = Nd4j.gemm(A, ndx, false, false);
-        int n = nrows();
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; i < m; i++) {
             y[i] += ndy.getDouble(i);
         }
 
@@ -137,11 +184,14 @@ public class NDMatrix implements DenseMatrix {
 
     @Override
     public double[] axpy(double[] x, double[] y, double b) {
-        INDArray ndx = Nd4j.create(x, new int[]{x.length, 1});
+        // Nd4j.getBlasWrapper().level2().gemv() crashes.
+        // Use gemm for now.
+        int m = nrows();
+        int n = ncols();
+        INDArray ndx = Nd4j.create(x, new int[]{n, 1});
         INDArray ndy = Nd4j.gemm(A, ndx, false, false);
-        int n = nrows();
-        for (int i = 0; i < n; i++) {
-            y[i] = y[i] * b + ndy.getDouble(i);
+        for (int i = 0; i < m; i++) {
+            y[i] = b * y[i] + ndy.getDouble(i);
         }
 
         return y;
@@ -149,9 +199,12 @@ public class NDMatrix implements DenseMatrix {
 
     @Override
     public double[] atx(double[] x, double[] y) {
-        INDArray ndx = Nd4j.create(x, new int[]{x.length, 1});
+        // Nd4j.getBlasWrapper().level2().gemv() crashes.
+        // Use gemm for now.
+        int m = nrows();
+        int n = ncols();
+        INDArray ndx = Nd4j.create(x, new int[]{m, 1});
         INDArray ndy = Nd4j.gemm(A, ndx, true, false);
-        int n = nrows();
         for (int i = 0; i < n; i++) {
             y[i] = ndy.getDouble(i);
         }
@@ -161,9 +214,12 @@ public class NDMatrix implements DenseMatrix {
 
     @Override
     public double[] atxpy(double[] x, double[] y) {
-        INDArray ndx = Nd4j.create(x, new int[]{x.length, 1});
+        // Nd4j.getBlasWrapper().level2().gemv() crashes.
+        // Use gemm for now.
+        int m = nrows();
+        int n = ncols();
+        INDArray ndx = Nd4j.create(x, new int[]{m, 1});
         INDArray ndy = Nd4j.gemm(A, ndx, true, false);
-        int n = nrows();
         for (int i = 0; i < n; i++) {
             y[i] += ndy.getDouble(i);
         }
@@ -173,11 +229,14 @@ public class NDMatrix implements DenseMatrix {
 
     @Override
     public double[] atxpy(double[] x, double[] y, double b) {
-        INDArray ndx = Nd4j.create(x, new int[]{x.length, 1});
+        // Nd4j.getBlasWrapper().level2().gemv() crashes.
+        // Use gemm for now.
+        int m = nrows();
+        int n = ncols();
+        INDArray ndx = Nd4j.create(x, new int[]{m, 1});
         INDArray ndy = Nd4j.gemm(A, ndx, true, false);
-        int n = nrows();
         for (int i = 0; i < n; i++) {
-            y[i] = y[i] * b + ndy.getDouble(i);
+            y[i] = b * y[i] + ndy.getDouble(i);
         }
 
         return y;
@@ -252,7 +311,7 @@ public class NDMatrix implements DenseMatrix {
         if (b instanceof NDMatrix)
             add((NDMatrix) b);
         else
-            DenseMatrix.super.add(b);
+            super.add(b);
 
         return this;
     }
@@ -271,7 +330,7 @@ public class NDMatrix implements DenseMatrix {
         if (b instanceof NDMatrix && c instanceof NDMatrix)
             return add((NDMatrix) b, (NDMatrix) c);
         else
-            return DenseMatrix.super.add(b, c);
+            return super.add(b, c);
     }
 
     public NDMatrix add(NDMatrix b, NDMatrix c) {
@@ -284,7 +343,7 @@ public class NDMatrix implements DenseMatrix {
         if (b instanceof NDMatrix)
             sub((NDMatrix) b);
         else
-            DenseMatrix.super.sub(b);
+            super.sub(b);
 
         return this;
     }
@@ -303,7 +362,7 @@ public class NDMatrix implements DenseMatrix {
         if (b instanceof NDMatrix && c instanceof NDMatrix)
             return sub((NDMatrix) b, (NDMatrix) c);
         else
-            return DenseMatrix.super.sub(b, c);
+            return super.sub(b, c);
     }
 
     public NDMatrix sub(NDMatrix b, NDMatrix c) {
@@ -316,7 +375,7 @@ public class NDMatrix implements DenseMatrix {
         if (b instanceof NDMatrix)
             mul((NDMatrix) b);
         else
-            DenseMatrix.super.mul(b);
+            super.mul(b);
 
         return this;
     }
@@ -335,7 +394,7 @@ public class NDMatrix implements DenseMatrix {
         if (b instanceof NDMatrix && c instanceof NDMatrix)
             return mul((NDMatrix) b, (NDMatrix) c);
         else
-            return DenseMatrix.super.mul(b, c);
+            return super.mul(b, c);
     }
 
     public NDMatrix mul(NDMatrix b, NDMatrix c) {
@@ -348,7 +407,7 @@ public class NDMatrix implements DenseMatrix {
         if (b instanceof NDMatrix)
             div((NDMatrix) b);
         else
-            DenseMatrix.super.div(b);
+            super.div(b);
 
         return this;
     }
@@ -367,7 +426,7 @@ public class NDMatrix implements DenseMatrix {
         if (b instanceof NDMatrix && c instanceof NDMatrix)
             return div((NDMatrix) b, (NDMatrix) c);
         else
-            return DenseMatrix.super.div(b, c);
+            return super.div(b, c);
     }
 
     public NDMatrix div(NDMatrix b, NDMatrix c) {
@@ -386,7 +445,7 @@ public class NDMatrix implements DenseMatrix {
         if (c instanceof NDMatrix)
             return add(x, (NDMatrix)c);
         else
-            return DenseMatrix.super.add(x, c);
+            return super.add(x, c);
     }
 
     public NDMatrix add(double x, NDMatrix c) {
@@ -405,7 +464,7 @@ public class NDMatrix implements DenseMatrix {
         if (c instanceof NDMatrix)
             return sub(x, (NDMatrix) c);
         else
-            return DenseMatrix.super.sub(x, c);
+            return super.sub(x, c);
     }
 
     public NDMatrix sub(double x, NDMatrix c) {
@@ -424,7 +483,7 @@ public class NDMatrix implements DenseMatrix {
         if (c instanceof NDMatrix)
             return mul(x, (NDMatrix) c);
         else
-            return DenseMatrix.super.mul(x, c);
+            return super.mul(x, c);
     }
 
     public NDMatrix mul(double x, NDMatrix c) {
@@ -443,7 +502,7 @@ public class NDMatrix implements DenseMatrix {
         if (c instanceof NDMatrix)
             return div(x, (NDMatrix) c);
         else
-            return DenseMatrix.super.div(x, c);
+            return super.div(x, c);
     }
 
     public NDMatrix div(double x, NDMatrix c) {
