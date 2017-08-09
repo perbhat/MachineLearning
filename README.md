@@ -34,7 +34,7 @@ For Scala API, please use
     libraryDependencies += "com.github.haifengl" %% "smile-scala" % "1.4.0"
 ```
 
-To enable machine optimised matrix computation, the users should add
+To enable machine optimized matrix computation, the users should add
 the dependency of smile-netlib:
 ```
     <dependency>
@@ -43,7 +43,7 @@ the dependency of smile-netlib:
       <version>1.4.0</version>
     </dependency>
 ```
-and also make their machine-optimised libblas3 (CBLAS) and liblapack3 (Fortran)
+and also make their machine-optimized libblas3 (CBLAS) and liblapack3 (Fortran)
 available as shared libraries at runtime.
 
 OS X
