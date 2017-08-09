@@ -22,6 +22,7 @@ smile.math.rbf
 smile.math.special
 smile.mds
 smile.neighbor
+smile.netlib
 smile.nlp
 smile.nlp.collocation
 smile.nlp.dictionary
